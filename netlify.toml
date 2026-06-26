@@ -1,4 +1,4 @@
 [build]
   base = "sk-vault"
   command = "npm run build"
-  publish = "sk-vault/dist"
+  publish = "dist"
