@@ -317,7 +317,7 @@ a{color:inherit;text-decoration:none;}
 .upload-zone-icon{font-size:28px;margin-bottom:8px;opacity:.6;}
 .upload-zone p{color:var(--ink2);font-size:13px;}
 .cover-upload-row{display:flex;gap:16px;align-items:stretch;}
-.cover-preview{width:90px;height:120px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--border);background:var(--bg3);}
+.cover-preview{position:relative;width:90px;height:120px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--border);background:var(--bg3);}
 .cover-preview img{width:100%;height:100%;object-fit:cover;}
 .cover-upload-zone{flex:1;padding:14px;}
 .cover-upload-zone .upload-zone-icon{font-size:22px;margin-bottom:5px;}
