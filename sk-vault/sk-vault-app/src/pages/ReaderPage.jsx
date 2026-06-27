@@ -1,21 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import * as pdfjsLib from 'pdfjs-dist'
 import { useAuth } from '../context/AuthContext'
 import { fetchBookById, getBookFileUrl, hasUserPurchased } from '../lib/books'
 
-// Use CDN worker — avoids ALL version/build tool conflicts
-const PDFJS_VERSION = '4.4.168'
-let pdfjsLib = null
+// Use CDN worker — most reliable across all environments
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs'
 
-async function getPdfJs() {
-  if (pdfjsLib) return pdfjsLib
-  // Dynamically import so Vite doesn't bundle the worker
-  const mod = await import('pdfjs-dist')
-  mod.GlobalWorkerOptions.workerSrc =
-    `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`
-  pdfjsLib = mod
-  return mod
-}
+const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168'
 
 export default function ReaderPage() {
   const { id } = useParams()
@@ -34,7 +27,7 @@ export default function ReaderPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [rendering, setRendering] = useState(false)
 
-  // Block copy/print shortcuts on desktop
+  // Block copy/print on desktop
   useEffect(() => {
     function blockKeys(e) {
       if ((e.ctrlKey || e.metaKey) && ['p','s','c','u'].includes(e.key.toLowerCase()))
@@ -59,7 +52,8 @@ export default function ReaderPage() {
 
         if (!bookData.file_path) { setStatus('no-file'); return }
 
-        const allowed = isAdmin || bookData.is_free || (user && (await hasUserPurchased(user.id, id)))
+        const allowed = isAdmin || bookData.is_free ||
+          (user && (await hasUserPurchased(user.id, id)))
         if (cancelled) return
         if (!allowed) { setStatus('denied'); return }
 
@@ -70,14 +64,11 @@ export default function ReaderPage() {
           setStatus('error'); return
         }
 
-        const pdfjs = await getPdfJs()
-        if (cancelled) return
-
-        const pdf = await pdfjs.getDocument({
+        const pdf = await pdfjsLib.getDocument({
           url,
-          cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/cmaps/`,
+          cMapUrl: `${PDFJS_CDN}/cmaps/`,
           cMapPacked: true,
-          standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/standard_fonts/`,
+          standardFontDataUrl: `${PDFJS_CDN}/standard_fonts/`,
         }).promise
 
         if (cancelled) return
@@ -99,7 +90,6 @@ export default function ReaderPage() {
   const renderPage = useCallback(async (num) => {
     if (!pdfDocRef.current || !canvasRef.current) return
 
-    // Cancel previous render
     if (renderTaskRef.current) {
       try { renderTaskRef.current.cancel() } catch (_) {}
       renderTaskRef.current = null
@@ -111,7 +101,6 @@ export default function ReaderPage() {
       const canvas = canvasRef.current
       if (!canvas) return
 
-      // Wait for container width on mobile
       const container = containerRef.current
       let containerWidth = container?.clientWidth || 0
       if (containerWidth < 10) {
@@ -135,9 +124,7 @@ export default function ReaderPage() {
       await task.promise
       renderTaskRef.current = null
     } catch (err) {
-      if (err?.name !== 'RenderingCancelledException') {
-        console.error('Render error:', err)
-      }
+      if (err?.name !== 'RenderingCancelledException') console.error('Render error:', err)
     } finally {
       setRendering(false)
     }
@@ -147,7 +134,6 @@ export default function ReaderPage() {
     if (status === 'ready') renderPage(pageNum)
   }, [status, pageNum, renderPage])
 
-  // Re-render on resize / orientation change
   useEffect(() => {
     if (status !== 'ready') return
     let timer
@@ -211,8 +197,10 @@ export default function ReaderPage() {
         <div style={{ fontSize:44 }}>😕</div>
         <p style={{ color:'var(--danger)', fontSize:16, fontWeight:700 }}>Something went wrong</p>
         <p style={{ color:'var(--ink2)', fontSize:13, maxWidth:300, lineHeight:1.6 }}>{errorMsg}</p>
-        <button className="btn btn-secondary" onClick={close}>Go back</button>
-        <button className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>
+        <div style={{ display:'flex', gap:10 }}>
+          <button className="btn btn-secondary" onClick={close}>Go back</button>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>
+        </div>
       </div>
     </div>
   )
@@ -234,18 +222,14 @@ export default function ReaderPage() {
       <div className="reader-body">
         <div className="pdf-container" ref={containerRef}>
           {rendering && (
-            <div style={{
-              position:'absolute', top:8, right:8,
-              fontSize:11, color:'var(--ink3)',
-              background:'var(--bg2)', padding:'3px 8px',
-              borderRadius:4, zIndex:2
-            }}>Rendering…</div>
+            <div style={{ position:'absolute',top:8,right:8,fontSize:11,color:'var(--ink3)',background:'var(--bg2)',padding:'3px 8px',borderRadius:4,zIndex:2 }}>
+              Rendering…
+            </div>
           )}
           <canvas ref={canvasRef} style={{ display:'block' }} />
         </div>
       </div>
 
-      {/* Mobile bottom nav */}
       <div className="reader-footer">
         <button className="reader-page-btn" onClick={goPrev} disabled={pageNum <= 1 || rendering}>‹</button>
         <span style={{ fontSize:14, color:'var(--ink2)', fontWeight:600 }}>{pageNum} of {totalPages}</span>
