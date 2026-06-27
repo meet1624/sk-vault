@@ -74,7 +74,7 @@ export default function BookDetailPage() {
           <h1 className="book-detail-title">{book.title}</h1>
           <p className="book-detail-author">by {book.author}</p>
           <p className="book-detail-meta">
-            {book.category}{book.pages ? ` · ${book.pages} pages` : ''}
+            {book.category}{book.pages ? ` · ${book.pages} pages` : ''}{book.language ? ` · ${book.language}` : ''}
           </p>
 
           <div className="book-price-row" style={{ margin: '20px 0 24px' }}>

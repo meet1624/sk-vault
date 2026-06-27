@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 
 const EMOJIS = ['📚','📖','🎓','💡','🔥','⚡','🌟','🎯','🧠','📝','🚀','💎','🌈','🎨','🔮','🎵']
 const COLORS = ['#6c63ff','#ec4899','#f59e0b','#10b981','#38bdf8','#f97316','#a78bfa','#14b8a6']
+const LANGUAGES = ['English', 'Hindi', 'Hinglish', 'Gujarati', 'Marathi', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Bengali', 'Punjabi', 'Urdu']
 
 const emptyForm = {
   id: null,
@@ -18,6 +19,7 @@ const emptyForm = {
   discount_percent: 0,
   is_free: false,
   pages: '',
+  language: 'English',
   cover_image_url: '',
 }
 
@@ -110,6 +112,7 @@ export default function AdminPage() {
       discount_percent: book.discount_percent,
       is_free: book.is_free,
       pages: book.pages || '',
+      language: book.language || 'English',
       cover_image_url: book.cover_image_url || '',
     })
     setFile(null)
@@ -212,6 +215,7 @@ export default function AdminPage() {
         discount_percent: form.is_free ? 0 : Math.round(Number(form.discount_percent) || 0),
         is_free: form.is_free,
         pages: form.pages ? Number(form.pages) : null,
+        language: form.language || 'English',
         ...(filePath ? { file_path: filePath } : {}),
         cover_image_url: coverUrl,
       }
@@ -283,6 +287,7 @@ export default function AdminPage() {
                     <th></th>
                     <th>Title</th>
                     <th>Author</th>
+                    <th>Language</th>
                     <th>Price</th>
                     <th>File</th>
                     <th></th>
@@ -302,6 +307,7 @@ export default function AdminPage() {
                       </td>
                       <td>{book.title}</td>
                       <td>{book.author}</td>
+                      <td>{book.language || '—'}</td>
                       <td>{book.is_free ? 'Free' : formatPrice(book.price_cents)}</td>
                       <td>{book.file_path ? '✅' : '⚠️ none'}</td>
                       <td>
@@ -369,6 +375,19 @@ export default function AdminPage() {
                     onChange={(e) => setForm({ ...form, pages: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Language</label>
+                <select
+                  className="form-input"
+                  value={form.language}
+                  onChange={(e) => setForm({ ...form, language: e.target.value })}
+                >
+                  {LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>{lang}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
