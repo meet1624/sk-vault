@@ -827,3 +827,13 @@ html{scroll-behavior:smooth;}
   .reader-footer{display:flex;}
   .reader-body{padding:10px 8px;}
 }
+
+/* ── SCROLL MODE ── */
+.pdf-scroll-container{
+  width:100%;max-width:750px;
+  background:#fff;
+  border-radius:8px;
+  overflow:hidden;
+  box-shadow:var(--sh-card);
+  min-height:200px;
+}
