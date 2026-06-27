@@ -23,9 +23,9 @@ export default function Footer() {
         <div className="footer-bottom">
           <span className="footer-copy">© {new Date().getFullYear()} SK-Vault. All rights reserved.</span>
           <div className="footer-legal">
-            <span style={{fontSize:12,color:'var(--ink3)'}}>Privacy</span>
-            <span style={{fontSize:12,color:'var(--ink3)'}}>Terms</span>
-            <span style={{fontSize:12,color:'var(--ink3)'}}>Support</span>
+            <span>Privacy</span>
+            <span>Terms</span>
+            <span>Support</span>
           </div>
         </div>
       </div>

@@ -837,3 +837,25 @@ html{scroll-behavior:smooth;}
   box-shadow:var(--sh-card);
   min-height:200px;
 }
+
+/* ── BOOK CARD META ROW (language + category) ── */
+.book-meta-row{
+  display:flex;gap:5px;flex-wrap:wrap;
+  margin-bottom:8px;margin-top:-4px;
+}
+.book-lang-tag{
+  font-size:10px;font-weight:600;
+  padding:2px 7px;border-radius:5px;
+  background:rgba(180,83,9,.08);
+  color:var(--amber);
+  border:1px solid rgba(180,83,9,.18);
+  white-space:nowrap;
+}
+.book-cat-tag{
+  font-size:10px;font-weight:600;
+  padding:2px 7px;border-radius:5px;
+  background:var(--bg3);
+  color:var(--ink2);
+  border:1px solid var(--border);
+  white-space:nowrap;
+}

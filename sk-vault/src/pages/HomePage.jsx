@@ -232,6 +232,12 @@ function BookCard({ book, onClick }) {
       <div className="book-info">
         <div className="book-title">{book.title}</div>
         <div className="book-author">{book.author}</div>
+        {(book.language || book.category) && (
+          <div className="book-meta-row">
+            {book.language && <span className="book-lang-tag">🌐 {book.language}</span>}
+            {book.category && <span className="book-cat-tag">{book.category}</span>}
+          </div>
+        )}
         <div className="book-price-row">
           {book.is_free
             ? <span className="price-main">Free</span>
