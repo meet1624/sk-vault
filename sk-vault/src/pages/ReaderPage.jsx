@@ -1,39 +1,37 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useAuth } from '../context/AuthContext'
 import { fetchBookById, getBookFileUrl, hasUserPurchased } from '../lib/books'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+// Use CDN worker — most reliable across all environments
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs'
+
+const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168'
 
 export default function ReaderPage() {
   const { id } = useParams()
   const { user, isAdmin } = useAuth()
   const navigate = useNavigate()
 
-  const pdfDocRef = useRef(null)
+  const canvasRef = useRef(null)
   const containerRef = useRef(null)
-  const canvasRefs = useRef({})
-  const renderedPages = useRef(new Set())
-  const intersectingPages = useRef(new Set())
+  const pdfDocRef = useRef(null)
+  const renderTaskRef = useRef(null)
 
   const [book, setBook] = useState(null)
-  const [status, setStatus] = useState('loading') // loading | denied | no-file | ready | error
+  const [status, setStatus] = useState('loading')
   const [errorMsg, setErrorMsg] = useState('')
-  const [pageNum, setPageNum] = useState(1) // page currently in view (for the indicator)
+  const [pageNum, setPageNum] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
-  const [pageAspect, setPageAspect] = useState(1.414) // height/width, used to size placeholders
+  const [rendering, setRendering] = useState(false)
 
-  // Block the most common "save/print/copy" shortcuts while reading.
-  // Worth being upfront: this deters casual copying, it does not stop
-  // a determined person (e.g. screenshots always work). Real protection
-  // is the access control on the file itself, not this.
+  // Block copy/print on desktop
   useEffect(() => {
     function blockKeys(e) {
-      if ((e.ctrlKey || e.metaKey) && ['p', 's', 'c', 'u'].includes(e.key.toLowerCase())) {
+      if ((e.ctrlKey || e.metaKey) && ['p','s','c','u'].includes(e.key.toLowerCase()))
         e.preventDefault()
-      }
     }
     document.addEventListener('keydown', blockKeys)
     return () => document.removeEventListener('keydown', blockKeys)
@@ -41,203 +39,201 @@ export default function ReaderPage() {
 
   useEffect(() => {
     let cancelled = false
-
     async function load() {
       setStatus('loading')
-
-      const { data: bookData, error: bookError } = await fetchBookById(id)
-      if (cancelled) return
-      if (bookError || !bookData) {
-        setErrorMsg(bookError?.message || 'Book not found')
-        setStatus('error')
-        return
-      }
-      setBook(bookData)
-
-      if (!bookData.file_path) {
-        setStatus('no-file')
-        return
-      }
-
-      // Access check happens twice: once here for a clean UI message,
-      // and again for real by the storage RLS policy itself. Even if
-      // someone bypassed this frontend check, the signed URL request
-      // below would still fail server-side for a non-owner.
-      // Admins can preview any book regardless of purchase status --
-      // the storage policy already allows this server-side, so the
-      // frontend check needs to match it.
-      const allowed =
-        isAdmin || bookData.is_free || (user && (await hasUserPurchased(user.id, id)))
-      if (!allowed) {
-        setStatus('denied')
-        return
-      }
-
-      const { url, error: urlError } = await getBookFileUrl(bookData.file_path)
-      if (cancelled) return
-      if (urlError || !url) {
-        setErrorMsg(urlError?.message || 'Could not load file')
-        setStatus('error')
-        return
-      }
-
       try {
-        const loadingTask = pdfjsLib.getDocument({ url })
-        const pdf = await loadingTask.promise
+        const { data: bookData, error: bookError } = await fetchBookById(id)
+        if (cancelled) return
+        if (bookError || !bookData) {
+          setErrorMsg(bookError?.message || 'Book not found')
+          setStatus('error'); return
+        }
+        setBook(bookData)
+
+        if (!bookData.file_path) { setStatus('no-file'); return }
+
+        const allowed = isAdmin || bookData.is_free ||
+          (user && (await hasUserPurchased(user.id, id)))
+        if (cancelled) return
+        if (!allowed) { setStatus('denied'); return }
+
+        const { url, error: urlError } = await getBookFileUrl(bookData.file_path)
+        if (cancelled) return
+        if (urlError || !url) {
+          setErrorMsg(urlError?.message || 'Could not load file')
+          setStatus('error'); return
+        }
+
+        const pdf = await pdfjsLib.getDocument({
+          url,
+          cMapUrl: `${PDFJS_CDN}/cmaps/`,
+          cMapPacked: true,
+          standardFontDataUrl: `${PDFJS_CDN}/standard_fonts/`,
+        }).promise
+
         if (cancelled) return
         pdfDocRef.current = pdf
         setTotalPages(pdf.numPages)
-
-        // Most PDFs use a consistent page size, so the first page's
-        // aspect ratio is used to size every page's placeholder box
-        // before it has actually rendered (keeps scroll height stable).
-        const firstPage = await pdf.getPage(1)
-        const baseViewport = firstPage.getViewport({ scale: 1 })
-        if (!cancelled) setPageAspect(baseViewport.height / baseViewport.width)
-
         setPageNum(1)
         setStatus('ready')
       } catch (err) {
-        setErrorMsg(err.message)
-        setStatus('error')
+        if (!cancelled) {
+          setErrorMsg(err?.message || 'Failed to load PDF')
+          setStatus('error')
+        }
       }
     }
-
     load()
     return () => { cancelled = true }
-  }, [id, user])
+  }, [id, user, isAdmin])
 
-  // Lazily render pages as they scroll into (or near) view, instead of
-  // rendering every page up front -- important for books with hundreds
-  // of pages.
+  const renderPage = useCallback(async (num) => {
+    if (!pdfDocRef.current || !canvasRef.current) return
+
+    if (renderTaskRef.current) {
+      try { renderTaskRef.current.cancel() } catch (_) {}
+      renderTaskRef.current = null
+    }
+
+    setRendering(true)
+    try {
+      const page = await pdfDocRef.current.getPage(num)
+      const canvas = canvasRef.current
+      if (!canvas) return
+
+      const container = containerRef.current
+      let containerWidth = container?.clientWidth || 0
+      if (containerWidth < 10) {
+        await new Promise(r => setTimeout(r, 100))
+        containerWidth = container?.clientWidth || (window.innerWidth - 32)
+      }
+
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+      const baseViewport = page.getViewport({ scale: 1 })
+      const scale = (containerWidth / baseViewport.width) * pixelRatio
+      const viewport = page.getViewport({ scale })
+
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      canvas.style.width = containerWidth + 'px'
+      canvas.style.height = Math.floor(viewport.height / pixelRatio) + 'px'
+
+      const ctx = canvas.getContext('2d')
+      const task = page.render({ canvasContext: ctx, viewport })
+      renderTaskRef.current = task
+      await task.promise
+      renderTaskRef.current = null
+    } catch (err) {
+      if (err?.name !== 'RenderingCancelledException') console.error('Render error:', err)
+    } finally {
+      setRendering(false)
+    }
+  }, [])
+
   useEffect(() => {
-    if (status !== 'ready' || !containerRef.current || totalPages === 0) return
+    if (status === 'ready') renderPage(pageNum)
+  }, [status, pageNum, renderPage])
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const num = Number(entry.target.dataset.page)
-          if (entry.isIntersecting) {
-            intersectingPages.current.add(num)
-            renderPage(num)
-          } else {
-            intersectingPages.current.delete(num)
-          }
-        })
-        if (intersectingPages.current.size > 0) {
-          setPageNum(Math.min(...intersectingPages.current))
-        }
-      },
-      { root: containerRef.current, rootMargin: '900px 0px', threshold: 0.01 }
-    )
+  useEffect(() => {
+    if (status !== 'ready') return
+    let timer
+    function onResize() {
+      clearTimeout(timer)
+      timer = setTimeout(() => renderPage(pageNum), 250)
+    }
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+      clearTimeout(timer)
+    }
+  }, [status, pageNum, renderPage])
 
-    const wrappers = containerRef.current.querySelectorAll('.pdf-page-wrap')
-    wrappers.forEach((w) => observer.observe(w))
+  function goPrev() { if (pageNum > 1) setPageNum(p => p - 1) }
+  function goNext() { if (pageNum < totalPages) setPageNum(p => p + 1) }
+  function close() { navigate(`/book/${id}`) }
 
-    return () => observer.disconnect()
-  }, [status, totalPages])
-
-  async function renderPage(num) {
-    if (renderedPages.current.has(num)) return
-    renderedPages.current.add(num)
-
-    const pdf = pdfDocRef.current
-    const canvas = canvasRefs.current[num]
-    if (!pdf || !canvas) return
-
-    const page = await pdf.getPage(num)
-    const containerWidth = canvas.parentElement.clientWidth
-    const baseViewport = page.getViewport({ scale: 1 })
-    const scale = containerWidth / baseViewport.width
-    const viewport = page.getViewport({ scale })
-
-    canvas.width = viewport.width
-    canvas.height = viewport.height
-
-    const ctx = canvas.getContext('2d')
-    await page.render({ canvasContext: ctx, viewport }).promise
+  const center = {
+    display:'flex', flexDirection:'column',
+    alignItems:'center', justifyContent:'center',
+    gap:16, padding:32, textAlign:'center', flex:1
   }
 
-  function scrollToPage(num) {
-    const target = containerRef.current?.querySelector(`[data-page="${num}"]`)
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  if (status === 'loading') return (
+    <div className="reader-overlay">
+      <div style={center}>
+        <div style={{ fontSize:40 }}>📖</div>
+        <p style={{ color:'var(--ink2)', fontSize:16 }}>Loading book…</p>
+      </div>
+    </div>
+  )
 
-  function goPrev() {
-    if (pageNum > 1) scrollToPage(pageNum - 1)
-  }
-  function goNext() {
-    if (pageNum < totalPages) scrollToPage(pageNum + 1)
-  }
+  if (status === 'denied') return (
+    <div className="reader-overlay">
+      <div style={center}>
+        <div style={{ fontSize:44 }}>🔒</div>
+        <p style={{ color:'var(--ink)', fontSize:17, fontWeight:700 }}>Access restricted</p>
+        <p style={{ color:'var(--ink2)', fontSize:14 }}>Purchase this book to read it.</p>
+        <button className="btn btn-primary" onClick={() => navigate(`/book/${id}`)}>Go to book page</button>
+      </div>
+    </div>
+  )
 
-  function close() {
-    navigate(`/book/${id}`)
-  }
+  if (status === 'no-file') return (
+    <div className="reader-overlay">
+      <div style={center}>
+        <div style={{ fontSize:44 }}>⚠️</div>
+        <p style={{ color:'var(--ink)', fontSize:17, fontWeight:700 }}>No file uploaded yet</p>
+        <p style={{ color:'var(--ink2)', fontSize:14 }}>The publisher hasn't uploaded this book's file.</p>
+        <button className="btn btn-secondary" onClick={close}>Go back</button>
+      </div>
+    </div>
+  )
 
-  if (status === 'loading') {
-    return <div className="reader-overlay"><div className="reader-body"><p style={{ color: '#888' }}>Loading book…</p></div></div>
-  }
-
-  if (status === 'denied') {
-    return (
-      <div className="reader-overlay">
-        <div className="reader-body" style={{ flexDirection: 'column', gap: 16 }}>
-          <p style={{ color: '#fff', fontSize: 18 }}>🔒 You don't have access to this book.</p>
-          <button className="btn btn-primary" onClick={() => navigate(`/book/${id}`)}>
-            Go to book page
-          </button>
+  if (status === 'error') return (
+    <div className="reader-overlay">
+      <div style={center}>
+        <div style={{ fontSize:44 }}>😕</div>
+        <p style={{ color:'var(--danger)', fontSize:16, fontWeight:700 }}>Something went wrong</p>
+        <p style={{ color:'var(--ink2)', fontSize:13, maxWidth:300, lineHeight:1.6 }}>{errorMsg}</p>
+        <div style={{ display:'flex', gap:10 }}>
+          <button className="btn btn-secondary" onClick={close}>Go back</button>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>
         </div>
       </div>
-    )
-  }
-
-  if (status === 'no-file') {
-    return (
-      <div className="reader-overlay">
-        <div className="reader-body" style={{ flexDirection: 'column', gap: 16 }}>
-          <p style={{ color: '#fff', fontSize: 18 }}>⚠️ This book has no file uploaded yet.</p>
-          <button className="btn btn-primary" onClick={close}>Go back</button>
-        </div>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="reader-overlay">
-        <div className="reader-body" style={{ flexDirection: 'column', gap: 16 }}>
-          <p style={{ color: '#f87171' }}>Something went wrong: {errorMsg}</p>
-          <button className="btn btn-primary" onClick={close}>Go back</button>
-        </div>
-      </div>
-    )
-  }
+    </div>
+  )
 
   return (
     <div className="reader-overlay">
       <div className="reader-header">
         <div className="reader-title">{book?.title}</div>
         <div className="reader-controls">
-          <button className="action-btn" onClick={goPrev} disabled={pageNum <= 1}>← Prev</button>
-          <span style={{ color: '#aaa', fontSize: 13 }}>{pageNum} / {totalPages}</span>
-          <button className="action-btn" onClick={goNext} disabled={pageNum >= totalPages}>Next →</button>
+          <button className="action-btn" onClick={goPrev} disabled={pageNum <= 1 || rendering}>‹ Prev</button>
+          <span style={{ fontSize:13, color:'var(--ink3)', whiteSpace:'nowrap', minWidth:64, textAlign:'center' }}>
+            {pageNum} / {totalPages}
+          </span>
+          <button className="action-btn" onClick={goNext} disabled={pageNum >= totalPages || rendering}>Next ›</button>
           <button className="action-btn" onClick={close}>✕ Close</button>
         </div>
       </div>
-      <div className="reader-body" ref={containerRef}>
-        <div className="pdf-scroll-list">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
-            <div
-              key={num}
-              className="pdf-page-wrap"
-              data-page={num}
-              style={{ aspectRatio: `1 / ${pageAspect}` }}
-            >
-              <canvas ref={(el) => { if (el) canvasRefs.current[num] = el }} />
-              <span className="pdf-page-number">{num} / {totalPages}</span>
+
+      <div className="reader-body">
+        <div className="pdf-container" ref={containerRef}>
+          {rendering && (
+            <div style={{ position:'absolute',top:8,right:8,fontSize:11,color:'var(--ink3)',background:'var(--bg2)',padding:'3px 8px',borderRadius:4,zIndex:2 }}>
+              Rendering…
             </div>
-          ))}
+          )}
+          <canvas ref={canvasRef} style={{ display:'block' }} />
         </div>
+      </div>
+
+      <div className="reader-footer">
+        <button className="reader-page-btn" onClick={goPrev} disabled={pageNum <= 1 || rendering}>‹</button>
+        <span style={{ fontSize:14, color:'var(--ink2)', fontWeight:600 }}>{pageNum} of {totalPages}</span>
+        <button className="reader-page-btn" onClick={goNext} disabled={pageNum >= totalPages || rendering}>›</button>
       </div>
     </div>
   )
