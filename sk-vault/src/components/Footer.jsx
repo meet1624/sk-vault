@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Footer() {
   return (
     <footer className="site-footer">
@@ -9,21 +11,21 @@ export default function Footer() {
           </div>
           <div className="footer-col">
             <div className="footer-col-title">Store</div>
-            <a href="/">Browse catalog</a>
-            <a href="/library">My Library</a>
+            <Link to="/">Browse catalog</Link>
+            <Link to="/library">My Library</Link>
           </div>
           <div className="footer-col">
             <div className="footer-col-title">Account</div>
-            <a href="/login">Log in</a>
-            <a href="/signup">Sign up</a>
+            <Link to="/login">Log in</Link>
+            <Link to="/signup">Sign up</Link>
           </div>
         </div>
         <div className="footer-bottom">
           <span className="footer-copy">© {new Date().getFullYear()} SK-Vault. All rights reserved.</span>
           <div className="footer-legal">
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
-            <a href="#">Support</a>
+            <span style={{fontSize:12,color:'var(--ink3)'}}>Privacy</span>
+            <span style={{fontSize:12,color:'var(--ink3)'}}>Terms</span>
+            <span style={{fontSize:12,color:'var(--ink3)'}}>Support</span>
           </div>
         </div>
       </div>
