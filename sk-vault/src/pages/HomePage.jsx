@@ -235,7 +235,7 @@ function BookCard({ book, onClick }) {
         {(book.language || book.category) && (
           <div className="book-meta-row">
             {book.language && <span className="book-lang-tag">🌐 {book.language}</span>}
-            {book.category && <span className="book-cat-tag">{book.category}</span>}
+            {book.category && <span className="book-cat-tag">{book.category.split(',')[0].trim()}</span>}
           </div>
         )}
         <div className="book-price-row">
