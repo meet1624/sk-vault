@@ -66,11 +66,7 @@ export default function BookDetailPage() {
             ) : (
               book.emoji
             )}
-            {book.is_free ? (
-              <span className="book-badge badge-free">FREE</span>
-            ) : hasDiscount ? (
-              <span className="book-badge badge-sale">-{book.discount_percent}%</span>
-            ) : null}
+            {book.is_free && <span className="book-badge badge-free">FREE</span>}
           </div>
         </div>
 
@@ -89,6 +85,9 @@ export default function BookDetailPage() {
                 <span className="price-main" style={{ fontSize: 26 }}>{formatPrice(discounted)}</span>
                 {hasDiscount && (
                   <span className="price-original">{formatPrice(book.price_cents)}</span>
+                )}
+                {hasDiscount && (
+                  <span className="badge-sale-inline">-{book.discount_percent}%</span>
                 )}
               </>
             )}

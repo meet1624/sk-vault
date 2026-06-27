@@ -198,7 +198,7 @@ a{color:inherit;text-decoration:none;}
 }
 .badge-free{background:rgba(20,83,45,.14);color:var(--forest);border:1px solid rgba(20,83,45,.25);backdrop-filter:blur(6px);}
 .badge-paid{background:rgba(255,255,255,.88);color:var(--ink2);border:1px solid var(--border);backdrop-filter:blur(6px);}
-.badge-sale{background:#E11D48;color:#fff;border:1.5px solid rgba(255,255,255,.55);}
+.badge-sale-inline{background:#E11D48;color:#fff;border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:middle;}
 
 .book-info{padding:15px;}
 .book-title{font-size:14px;font-weight:700;line-height:1.3;margin-bottom:3px;color:var(--ink);}

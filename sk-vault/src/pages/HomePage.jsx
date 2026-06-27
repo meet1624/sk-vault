@@ -227,11 +227,7 @@ function BookCard({ book, onClick }) {
         {book.cover_image_url
           ? <img src={book.cover_image_url} alt={book.title} className="book-cover-img" />
           : <span style={{ position:'relative',zIndex:1 }}>{book.emoji || '📚'}</span>}
-        {book.is_free
-          ? <span className="book-badge badge-free">FREE</span>
-          : hasDiscount
-            ? <span className="book-badge badge-sale">-{book.discount_percent}%</span>
-            : <span className="book-badge badge-paid">{formatPrice(discounted)}</span>}
+        {book.is_free && <span className="book-badge badge-free">FREE</span>}
       </div>
       <div className="book-info">
         <div className="book-title">{book.title}</div>
@@ -239,7 +235,11 @@ function BookCard({ book, onClick }) {
         <div className="book-price-row">
           {book.is_free
             ? <span className="price-main">Free</span>
-            : <><span className="price-main">{formatPrice(discounted)}</span>{hasDiscount && <span className="price-original">{formatPrice(book.price_cents)}</span>}</>}
+            : <>
+                <span className="price-main">{formatPrice(discounted)}</span>
+                {hasDiscount && <span className="price-original">{formatPrice(book.price_cents)}</span>}
+                {hasDiscount && <span className="badge-sale-inline">-{book.discount_percent}%</span>}
+              </>}
         </div>
         <button className={`book-buy-btn${book.is_free ? ' free' : ''}`}>
           {book.is_free ? 'Read free' : 'View book'}
