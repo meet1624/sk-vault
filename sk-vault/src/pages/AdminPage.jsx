@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchBooks, formatPrice } from '../lib/books'
+import { sendPurchaseReminder } from '../lib/payments'
 import { useAuth } from '../context/AuthContext'
 
 const EMOJIS = ['📚','📖','🎓','💡','🔥','⚡','🌟','🎯','🧠','📝','🚀','💎','🌈','🎨','🔮','🎵']
@@ -29,6 +30,9 @@ export default function AdminPage() {
   const [books, setBooks] = useState([])
   const [users, setUsers] = useState([])
   const [usersLoading, setUsersLoading] = useState(true)
+  const [purchases, setPurchases] = useState([])
+  const [purchasesLoading, setPurchasesLoading] = useState(true)
+  const [sendingReminder, setSendingReminder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(emptyForm)
   const [file, setFile] = useState(null)
@@ -46,6 +50,29 @@ export default function AdminPage() {
       .order('created_at', { ascending: false })
     if (!error) setUsers(data)
     setUsersLoading(false)
+  }
+
+  async function loadPurchases() {
+    setPurchasesLoading(true)
+    const { data, error } = await supabase
+      .from('purchases')
+      .select('id, status, amount_paid_cents, created_at, reminder_sent_at, user_id, book_id, profiles(email, full_name), books(title, cover_image_url, emoji, color)')
+      .order('created_at', { ascending: false })
+    if (!error) setPurchases(data)
+    setPurchasesLoading(false)
+  }
+
+  async function handleSendReminder(purchaseId) {
+    setSendingReminder(purchaseId)
+    try {
+      await sendPurchaseReminder(purchaseId)
+      showToast('Reminder email sent ✓')
+      loadPurchases()
+    } catch (err) {
+      showToast(`Failed to send: ${err.message}`)
+    } finally {
+      setSendingReminder(null)
+    }
   }
 
   async function handleRoleChange(targetUser, newRole) {
@@ -81,6 +108,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (section === 'users' && isAdmin) loadUsers()
+    if (section === 'purchases') loadPurchases()
   }, [section])
 
   async function loadBooks() {
@@ -256,6 +284,12 @@ export default function AdminPage() {
           onClick={() => { setForm(emptyForm); setFile(null); setSection('upload') }}
         >
           Add Book
+        </div>
+        <div
+          className={`sidebar-item ${section === 'purchases' ? 'active' : ''}`}
+          onClick={() => setSection('purchases')}
+        >
+          Purchases
         </div>
         {isAdmin && (
           <div
@@ -520,6 +554,74 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </>
+        )}
+
+        {section === 'purchases' && (
+          <>
+            <h2 className="section-title">Purchases</h2>
+            <p className="section-sub">See who has purchased each book, and remind anyone with an incomplete payment.</p>
+            {purchasesLoading ? (
+              <p>Loading…</p>
+            ) : purchases.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-icon">🧾</span>
+                <p>No purchase activity yet.</p>
+              </div>
+            ) : (
+              <div className="book-table-wrap">
+                <table className="book-table">
+                  <thead>
+                    <tr>
+                      <th>Buyer</th>
+                      <th>Book</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {purchases.map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{p.profiles?.full_name || '—'}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink3)' }}>{p.profiles?.email}</div>
+                        </td>
+                        <td>{p.books?.title || '—'}</td>
+                        <td>{formatPrice(p.amount_paid_cents)}</td>
+                        <td>
+                          {p.status === 'completed' ? (
+                            <span className="tag" style={{ background: 'var(--forest-bg)', color: 'var(--forest)', border: '1px solid var(--forest-border)' }}>
+                              ✓ Purchased
+                            </span>
+                          ) : (
+                            <span className="tag tag-amber">Pending</span>
+                          )}
+                          {p.status !== 'completed' && p.reminder_sent_at && (
+                            <div style={{ fontSize: 11, color: 'var(--ink3)', marginTop: 4 }}>
+                              Reminder sent {new Date(p.reminder_sent_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </td>
+                        <td>{new Date(p.created_at).toLocaleDateString()}</td>
+                        <td>
+                          {p.status !== 'completed' && (
+                            <button
+                              className="action-btn"
+                              disabled={sendingReminder === p.id}
+                              onClick={() => handleSendReminder(p.id)}
+                            >
+                              {sendingReminder === p.id ? 'Sending…' : p.reminder_sent_at ? 'Resend' : 'Send Reminder'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
 
