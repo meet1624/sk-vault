@@ -48,3 +48,7 @@ export async function createRazorpayOrder(bookId) {
 export async function verifyRazorpayPayment(payload) {
   return callEdgeFunction('verify-razorpay-payment', payload)
 }
+
+export async function sendPurchaseReminder(purchaseId) {
+  return callEdgeFunction('send-purchase-reminder', { purchase_id: purchaseId })
+}

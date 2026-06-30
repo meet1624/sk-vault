@@ -100,6 +100,12 @@ export default function BookDetailPage() {
               ? 'Read Now'
               : `Buy for ${formatPrice(discounted)}`}
           </button>
+
+          {owned && !book.is_free && (
+            <p style={{ marginTop: 10, fontSize: 13, color: 'var(--forest)', fontWeight: 600 }}>
+              ✓ You already own this book
+            </p>
+          )}
         </div>
       </div>
 
